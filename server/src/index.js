@@ -20,9 +20,22 @@ const PORT = Number(process.env.PORT || 4000);
 const JWT_SECRET = process.env.JWT_SECRET || 'bookworm-dev-secret-change-me';
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173';
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (origin === CLIENT_ORIGIN) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    const isLocalhost = protocol === 'http:' && /^(127\.0\.0\.1|localhost)$/.test(hostname);
+    const isVercelDomain = protocol === 'https:' && hostname.endsWith('.vercel.app');
+    return isLocalhost || isVercelDomain;
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin === CLIENT_ORIGIN || /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Origin not allowed by CORS'));

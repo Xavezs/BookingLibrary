@@ -6,7 +6,8 @@ import initSqlJs from 'sql.js';
 import { DEFAULT_DAILY_FINE_RATE, addDaysWib, formatWibDate } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.VERCEL ? path.join('/tmp', 'bookworm-data') : path.resolve(__dirname, '..', 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const dataDir = isServerless ? path.join('/tmp', 'bookworm-data') : path.resolve(__dirname, '..', 'data');
 const dbFile = path.join(dataDir, 'bookworm.sqlite');
 let SQL;
 let db;

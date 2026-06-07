@@ -11,7 +11,11 @@ import { addDaysWib, formatWibDate, normalizeEmail, overdueDays } from './utils.
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDist = path.resolve(__dirname, '..', '..', 'client', 'dist');
+const clientDistCandidates = [
+  path.resolve(__dirname, '..', 'public'),
+  path.resolve(__dirname, '..', '..', 'client', 'dist')
+];
+const clientDist = clientDistCandidates.find((candidate) => fs.existsSync(candidate));
 const PORT = Number(process.env.PORT || 4000);
 const JWT_SECRET = process.env.JWT_SECRET || 'bookworm-dev-secret-change-me';
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173';
@@ -475,7 +479,7 @@ app.put('/api/settings', auth('admin'), (req, res) => {
   res.json({ dailyFineRate: rate });
 });
 
-if (fs.existsSync(clientDist)) {
+if (clientDist) {
   app.use(express.static(clientDist));
   app.get('*', (req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));

@@ -81,7 +81,7 @@ function Login({ onLogin, toast }) {
           <h1 className="text-5xl font-bold leading-tight">Borrow, reserve, return, and reconcile fines in one calm desk.</h1>
           <p className="mt-6 text-lg text-blue-100">Role-based dashboards for librarians and members, backed by JWT auth and local SQLite persistence.</p>
         </div>
-        <p className="text-sm text-blue-100">Demo admin: admin / admin123 · Demo member: student / student123</p>
+        <p className="text-sm text-blue-100">Demo admin: admin / 123123 - Demo member: vinlee / 123123</p>
       </section>
       <section className="flex items-center justify-center p-6">
         <form onSubmit={submit} className="w-full max-w-md rounded-lg bg-white p-7 shadow-xl">

@@ -486,8 +486,9 @@ app.get('/api/settings', auth('admin'), (req, res) => {
 });
 
 app.put('/api/settings', auth('admin'), (req, res) => {
-  const rate = Number(req.body.dailyFineRate);
+  const rate = Math.round(Number(req.body.dailyFineRate));
   if (!Number.isFinite(rate) || rate < 0) return badRequest(res, 'Daily fine rate must be a positive number');
+  if (rate > 100000) return badRequest(res, 'Daily fine rate must be Rp 100.000 or less');
   run("UPDATE settings SET value = ? WHERE key = 'dailyFineRate'", [String(rate)]);
   res.json({ dailyFineRate: rate });
 });

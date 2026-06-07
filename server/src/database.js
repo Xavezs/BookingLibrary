@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import initSqlJs from 'sql.js';
-import { DEFAULT_DAILY_FINE_RATE, addDaysWib, formatWibDate } from './utils.js';
+import { DEFAULT_DAILY_FINE_RATE, formatWibDate } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
@@ -12,6 +12,7 @@ const dbFile = path.join(dataDir, 'bookworm.sqlite');
 let SQL;
 let db;
 let activeTransaction = false;
+const DEMO_SEED_VERSION = 'bookworm-demo-v3';
 
 function persist() {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -115,7 +116,7 @@ export async function initDatabase() {
   `);
 
   migrateDatabase();
-  seed();
+  ensureDemoDataset();
   repairDemoLinks();
   cleanupOrphanMemberUsers();
   persist();
@@ -188,35 +189,51 @@ export function transaction(callback) {
   }
 }
 
-function seed() {
+function ensureDemoDataset() {
+  const version = get("SELECT value FROM settings WHERE key = 'demoSeedVersion'")?.value;
   const existing = get('SELECT COUNT(*) AS count FROM users');
-  if (existing.count > 0) return;
+  if (existing.count > 0 && version === DEMO_SEED_VERSION) return;
 
+  resetDemoDataset();
+}
+
+function resetDemoDataset() {
   const today = formatWibDate();
-  const adminHash = bcrypt.hashSync('admin123', 10);
-  const memberHash = bcrypt.hashSync('student123', 10);
+  const passwordHash = bcrypt.hashSync('123123', 10);
+
+  runRaw('PRAGMA foreign_keys = OFF;');
+  for (const table of ['penalties', 'transactions', 'books', 'members', 'admins', 'users', 'settings', 'visits']) {
+    runRaw(`DELETE FROM ${table};`);
+  }
+  runRaw("DELETE FROM sqlite_sequence WHERE name IN ('penalties','transactions','books','members','admins','users','visits');");
+  runRaw('PRAGMA foreign_keys = ON;');
 
   const adminUserId = insert(
     'INSERT INTO users (username, password_hash, name, email, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ['admin', adminHash, 'Mira Librarian', 'admin@bookworm.local', 'admin', today]
+    ['admin', passwordHash, 'BookWorm Librarian', 'admin@bookworm.local', 'admin', today]
   );
   insert('INSERT INTO admins (user_id, admin_id) VALUES (?, ?)', [adminUserId, 'ADM-0001']);
 
   const memberUserId = insert(
     'INSERT INTO users (username, password_hash, name, email, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ['student', memberHash, 'Alya Prameswari', 'alya@student.ac.id', 'member', today]
+    ['vinlee', passwordHash, 'Vinlee', 'vincentlee2555@gmail.com', 'member', today]
   );
-  const memberId = insert(
+  insert(
     'INSERT INTO members (user_id, full_name, email, member_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [memberUserId, 'Alya Prameswari', 'alya@student.ac.id', '2123456789', 'Student', today]
+    [memberUserId, 'Vinlee', 'vincentlee2555@gmail.com', '2802424972', 'Student', today]
   );
 
   const books = [
     ['Clean Architecture', 'Robert C. Martin', 'Prentice Hall', '100000000001', '978-0-13-449416-6', 'Software Engineering', 'September 2017', 'Available'],
     ['Database System Concepts', 'Abraham Silberschatz', 'McGraw Hill', '100000000002', '978-0-07-802215-9', 'Database', 'March 2019', 'Available'],
-    ['Designing Data-Intensive Applications', 'Martin Kleppmann', 'OReilly Media', '100000000003', '978-1-449-37332-0', 'Distributed Systems', 'March 2017', 'Borrowed'],
-    ['Human-Computer Interaction', 'Alan Dix', 'Pearson', '100000000004', '978-0-13-046109-4', 'HCI', 'June 2003', 'Reserved'],
-    ['Refactoring', 'Martin Fowler', 'Addison-Wesley', '100000000005', '978-0-13-475759-9', 'Software Engineering', 'November 2018', 'Available']
+    ['Designing Data-Intensive Applications', 'Martin Kleppmann', 'OReilly Media', '100000000003', '978-1-449-37332-0', 'Distributed Systems', 'March 2017', 'Available'],
+    ['Human-Computer Interaction', 'Alan Dix', 'Pearson', '100000000004', '978-0-13-046109-4', 'HCI', 'June 2003', 'Available'],
+    ['Refactoring', 'Martin Fowler', 'Addison-Wesley', '100000000005', '978-0-13-475759-9', 'Software Engineering', 'November 2018', 'Available'],
+    ['Introduction to Algorithms', 'Thomas H. Cormen', 'MIT Press', '100000000006', '978-0-26-203384-8', 'Algorithms', 'July 2009', 'Available'],
+    ['Computer Networking: A Top-Down Approach', 'James F. Kurose', 'Pearson', '100000000007', '978-0-13-359414-0', 'Computer Networks', 'March 2016', 'Available'],
+    ['Artificial Intelligence: A Modern Approach', 'Stuart Russell', 'Pearson', '100000000008', '978-0-13-461099-3', 'Artificial Intelligence', 'April 2020', 'Available'],
+    ['Operating System Concepts', 'Abraham Silberschatz', 'Wiley', '100000000009', '978-1-11-980036-1', 'Operating Systems', 'February 2021', 'Available'],
+    ['Software Engineering', 'Ian Sommerville', 'Pearson', '100000000010', '978-0-13-394303-0', 'Software Engineering', 'April 2015', 'Available']
   ];
 
   for (const book of books) {
@@ -226,31 +243,17 @@ function seed() {
     );
   }
 
-  const borrowed = insert(
-    'INSERT INTO transactions (book_id, member_id, type, status, borrow_date, due_date, receipt_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [3, memberId, 'Borrow', 'Borrowed', '01-05-2026', '15-05-2026', 'BW-SEED-0001', today]
-  );
-  insert(
-    'INSERT INTO penalties (transaction_id, member_id, fine_amount, late_duration, status) VALUES (?, ?, ?, ?, ?)',
-    [borrowed, memberId, 10000, 4, 'Unpaid']
-  );
-  run('UPDATE members SET late_fee_balance = ? WHERE id = ?', [10000, memberId]);
-
-  insert(
-    'INSERT INTO transactions (book_id, member_id, type, status, borrow_date, due_date, receipt_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [4, memberId, 'Reservation', 'Reserved', today, addDaysWib(14), 'BW-SEED-0002', today]
-  );
-
   run('INSERT INTO settings (key, value) VALUES (?, ?)', ['dailyFineRate', String(DEFAULT_DAILY_FINE_RATE)]);
+  run('INSERT INTO settings (key, value) VALUES (?, ?)', ['demoSeedVersion', DEMO_SEED_VERSION]);
   run('INSERT INTO visits (date, count) VALUES (?, ?)', [today, 42]);
 }
 
 function repairDemoLinks() {
-  const studentUser = get("SELECT id FROM users WHERE username = 'student'");
-  const studentMember = get("SELECT id FROM members WHERE email = 'alya@student.ac.id'");
-  if (studentUser && studentMember) {
-    run('UPDATE members SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = 0)', [studentUser.id, studentMember.id]);
-    refreshSeedBalance(studentMember.id);
+  const vinleeUser = get("SELECT id FROM users WHERE username = 'vinlee'");
+  const vinleeMember = get("SELECT id FROM members WHERE email = 'vincentlee2555@gmail.com'");
+  if (vinleeUser && vinleeMember) {
+    run('UPDATE members SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = 0)', [vinleeUser.id, vinleeMember.id]);
+    refreshSeedBalance(vinleeMember.id);
   }
 
   const adminUser = get("SELECT id FROM users WHERE username = 'admin'");

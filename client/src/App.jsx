@@ -489,6 +489,7 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
                     {loan.status === 'Reserved' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkout`]} onClick={() => act(loan.id, 'checkout')}>{loadingActions[`${loan.id}:checkout`] && <Loader2 size={15} className="animate-spin" />}Check-Out</button>}
                     {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkin`]} onClick={() => act(loan.id, 'checkin')}>{loadingActions[`${loan.id}:checkin`] && <Loader2 size={15} className="animate-spin" />}Check-In</button>}
                     {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:renew`]} onClick={() => act(loan.id, 'renew')}>{loadingActions[`${loan.id}:renew`] ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}Renew</button>}
+                    {loan.status === 'Borrowed' && <button className="danger-button" disabled={loadingActions[`${loan.id}:simulateOverdue`]} onClick={() => act(loan.id, 'simulateOverdue')}>{loadingActions[`${loan.id}:simulateOverdue`] && <Loader2 size={15} className="animate-spin" />}Test Fine</button>}
                     {loan.status === 'Reserved' && <button className="danger-button" disabled={loadingActions[`${loan.id}:cancel`]} onClick={() => act(loan.id, 'cancel')}>{loadingActions[`${loan.id}:cancel`] && <Loader2 size={15} className="animate-spin" />}Cancel</button>}
                   </div>
                 ) : (
@@ -510,12 +511,35 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
 }
 
 function Receipt({ details }) {
+  const labels = {
+    receipt_number: 'Receipt Number',
+    book_title: 'Book Title',
+    borrower_email: 'Borrower Email',
+    borrower_number: 'Borrower Number',
+    borrow_date: 'Borrow Date',
+    due_date: 'Due Date',
+    paid_at: 'Paid At',
+    late_duration: 'Late Duration',
+    fine_amount: 'Fine Amount',
+    unpaid_fine_balance: 'Unpaid Fine Balance',
+    wallet_balance: 'Wallet Balance'
+  };
+  const rows = Object.entries(details || {})
+    .map(([key, value]) => {
+      if (value === null || value === undefined || value === '') return null;
+      let display = String(value);
+      if (['amount', 'balance', 'fine', 'wallet'].some((word) => key.includes(word))) display = currency(Number(value) || 0);
+      if (key === 'late_duration') display = `${value} days`;
+      return [key, display];
+    })
+    .filter(Boolean);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-      {Object.entries(details).map(([key, value]) => (
+      {rows.map(([key, value]) => (
         <div key={key} className="flex justify-between border-b border-slate-200 py-2 last:border-0">
-          <span className="font-semibold capitalize text-slate-500">{key.replaceAll('_', ' ')}</span>
-          <span className="text-right text-ink">{typeof value === 'number' && key.includes('amount') ? currency(value) : String(value)}</span>
+          <span className="font-semibold text-slate-500">{labels[key] || key.replaceAll('_', ' ')}</span>
+          <span className="text-right text-ink">{value}</span>
         </div>
       ))}
     </div>

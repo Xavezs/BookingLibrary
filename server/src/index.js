@@ -126,6 +126,11 @@ function recalculatePenalty(transactionId) {
   return { amount, days };
 }
 
+function loanPeriodDays(memberOrStatus) {
+  const status = typeof memberOrStatus === 'string' ? memberOrStatus : memberOrStatus?.status;
+  return status === 'Faculty' ? 21 : 14;
+}
+
 function refreshMemberBalance(memberId) {
   const row = get("SELECT COALESCE(SUM(fine_amount), 0) AS balance FROM penalties WHERE member_id = ? AND status = 'Unpaid'", [memberId]);
   run('UPDATE members SET late_fee_balance = ? WHERE id = ?', [row.balance || 0, memberId]);
@@ -308,7 +313,7 @@ app.post('/api/reservations', auth('member'), (req, res) => {
 
   const today = formatWibDate();
   const receipt = `BW-${Date.now()}`;
-  const dueDate = addDaysWib(14);
+  const dueDate = addDaysWib(loanPeriodDays(member));
   const reservation = transaction(() => {
     run("UPDATE books SET status = 'Reserved', updated_at = ? WHERE id = ?", [today, book.id]);
     const id = insert(
@@ -320,7 +325,16 @@ app.post('/api/reservations', auth('member'), (req, res) => {
 
   res.status(201).json({
     message: 'Reservation confirmed',
-    details: { ...reservation, book_title: book.title, author: book.author, borrower_email: member.email, borrower_number: member.member_code }
+    details: {
+      receipt_number: reservation.receipt_number,
+      book_title: book.title,
+      author: book.author,
+      status: reservation.status,
+      borrower_email: member.email,
+      borrower_number: member.member_code,
+      borrow_date: reservation.borrow_date,
+      due_date: reservation.due_date
+    }
   });
 });
 
@@ -340,7 +354,8 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
       run("UPDATE books SET status = 'Available', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'checkout') {
       if (!['Reserved'].includes(loan.status)) throw new Error('Only Reserved loans can be checked out');
-      run("UPDATE transactions SET type = 'Borrow', status = 'Borrowed', borrow_date = ?, due_date = ? WHERE id = ?", [today, addDaysWib(14), loan.id]);
+      const borrower = get('SELECT status FROM members WHERE id = ?', [loan.member_id]);
+      run("UPDATE transactions SET type = 'Borrow', status = 'Borrowed', borrow_date = ?, due_date = ? WHERE id = ?", [today, addDaysWib(loanPeriodDays(borrower)), loan.id]);
       run("UPDATE books SET status = 'Borrowed', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'checkin') {
       if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be checked in');
@@ -349,7 +364,12 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
       run("UPDATE books SET status = 'Available', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'renew') {
       if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be renewed');
-      run("UPDATE transactions SET type = 'Renewal', due_date = ? WHERE id = ?", [addDaysWib(14), loan.id]);
+      const borrower = get('SELECT status FROM members WHERE id = ?', [loan.member_id]);
+      run("UPDATE transactions SET type = 'Renewal', due_date = ? WHERE id = ?", [addDaysWib(loanPeriodDays(borrower)), loan.id]);
+    } else if (req.body.action === 'simulateOverdue') {
+      if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be marked overdue');
+      run('UPDATE transactions SET due_date = ? WHERE id = ?', [addDaysWib(-7), loan.id]);
+      recalculatePenalty(loan.id);
     } else if (req.body.action === 'cancel') {
       if (!['Reserved'].includes(loan.status)) throw new Error('Only Reserved loans can be cancelled');
       run("UPDATE transactions SET status = 'Cancelled' WHERE id = ?", [loan.id]);

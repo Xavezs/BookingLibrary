@@ -1,6 +1,5 @@
 node_modules/
 client/dist/
-server/public/
 server/data/
 *.log
 *.pid

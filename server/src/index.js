@@ -367,12 +367,19 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
 app.post('/api/penalties/:id/pay', auth('member'), (req, res) => {
   const penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [req.params.id]);
   if (!penalty) return res.status(404).json({ message: 'Fine not found' });
+  if (penalty.status === 'Paid') return badRequest(res, 'This fine is already paid');
   const member = get('SELECT * FROM members WHERE user_id = ?', [req.user.id]);
   if (!member || member.id !== penalty.member_id) return res.status(403).json({ message: 'Cannot pay another member fine' });
+  if (member.account_balance < penalty.fine_amount) return badRequest(res, 'Insufficient balance. Please top up first');
 
   const paidAt = formatWibDate();
-  run("UPDATE penalties SET status = 'Paid', paid_at = ? WHERE id = ?", [paidAt, penalty.id]);
-  const balance = refreshMemberBalance(member.id);
+  const result = transaction(() => {
+    run("UPDATE members SET account_balance = account_balance - ? WHERE id = ?", [penalty.fine_amount, member.id]);
+    run("UPDATE penalties SET status = 'Paid', paid_at = ? WHERE id = ?", [paidAt, penalty.id]);
+    const unpaidBalance = refreshMemberBalance(member.id);
+    const updatedMember = get('SELECT account_balance FROM members WHERE id = ?', [member.id]);
+    return { unpaidBalance, walletBalance: updatedMember.account_balance };
+  });
   res.json({
     message: 'Fine paid',
     receipt: {
@@ -381,8 +388,24 @@ app.post('/api/penalties/:id/pay', auth('member'), (req, res) => {
       amount: penalty.fine_amount,
       late_duration: penalty.late_duration,
       member: member.full_name,
-      balance
+      unpaid_fine_balance: result.unpaidBalance,
+      wallet_balance: result.walletBalance
     }
+  });
+});
+
+app.post('/api/wallet/topup', auth('member'), (req, res) => {
+  const amount = Number(req.body.amount || 50000);
+  if (!Number.isFinite(amount) || amount <= 0) return badRequest(res, 'Top up amount must be positive');
+  const member = get('SELECT * FROM members WHERE user_id = ?', [req.user.id]);
+  if (!member) return res.status(404).json({ message: 'Member profile not found' });
+  run('UPDATE members SET account_balance = account_balance + ? WHERE id = ?', [Math.round(amount), member.id]);
+  const updated = get('SELECT account_balance, late_fee_balance FROM members WHERE id = ?', [member.id]);
+  res.json({
+    message: 'Top up successful',
+    amount: Math.round(amount),
+    account_balance: updated.account_balance,
+    late_fee_balance: updated.late_fee_balance
   });
 });
 

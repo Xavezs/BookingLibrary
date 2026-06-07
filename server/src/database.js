@@ -59,6 +59,7 @@ export async function initDatabase() {
       member_code TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL CHECK(status IN ('Student', 'Faculty')),
       account_status TEXT NOT NULL DEFAULT 'Active',
+      account_balance INTEGER NOT NULL DEFAULT 0,
       late_fee_balance INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
@@ -112,6 +113,7 @@ export async function initDatabase() {
     );
   `);
 
+  migrateDatabase();
   seed();
   repairDemoLinks();
   cleanupOrphanMemberUsers();
@@ -120,6 +122,16 @@ export async function initDatabase() {
 
 function runRaw(sql) {
   db.run(sql);
+}
+
+function hasColumn(table, column) {
+  return all(`PRAGMA table_info(${table})`).some((row) => row.name === column);
+}
+
+function migrateDatabase() {
+  if (!hasColumn('members', 'account_balance')) {
+    runRaw('ALTER TABLE members ADD COLUMN account_balance INTEGER NOT NULL DEFAULT 0');
+  }
 }
 
 export function run(sql, params = []) {

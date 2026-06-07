@@ -155,7 +155,7 @@ function Shell({ user, onLogout, children, active, setActive, search, setSearch 
   );
 }
 
-function Dashboard({ user, data, reload, settings, saveRate, books, setActive, search }) {
+function Dashboard({ user, data, reload, settings, saveRate, books, setActive, search, profile, onTopUp }) {
   const [range, setRange] = useState('weekly');
   if (user.role !== 'admin') {
     const keyword = (search || '').trim().toLowerCase();
@@ -169,11 +169,24 @@ function Dashboard({ user, data, reload, settings, saveRate, books, setActive, s
           <div className="panel lg:col-span-2">
             <h2 className="section-title">Welcome back, {user.name}</h2>
             <p className="mt-2 text-slate-600">Browse available books, reserve titles, and pay fines before creating new reservations.</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm text-slate-500">Wallet Balance</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{currency(profile?.account_balance || 0)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm text-slate-500">Unpaid Fine</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{currency(profile?.late_fee_balance || 0)}</p>
+              </div>
+            </div>
           </div>
           <div className="panel">
             <h3 className="section-title">Need a book?</h3>
             <p className="mt-2 text-sm text-slate-500">Open Books/Cataloging and reserve anything marked Available.</p>
-            <button className="primary-button mt-4" onClick={() => setActive('Books/Cataloging')}>Browse Catalog</button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="primary-button" onClick={() => setActive('Books/Cataloging')}>Browse Catalog</button>
+              <button className="secondary-button" onClick={() => onTopUp(50000)}><CreditCard size={16} /> Top Up</button>
+            </div>
           </div>
         </div>
         <div className="panel">
@@ -394,10 +407,10 @@ function Members({ members, toast, reloadMembers, search }) {
       <div className="mb-4 flex items-center justify-between"><h2 className="section-title">Members</h2><button className="primary-button" onClick={() => setModal(emptyMember)}><UserPlus size={17} /> Add Member</button></div>
       <div className="overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>ID</th><th>Status</th><th>Balance</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>ID</th><th>Status</th><th>Wallet</th><th>Unpaid Fine</th><th></th></tr></thead>
           <tbody>{filteredMembers.map((member) => (
             <tr key={member.id}>
-              <td>{member.full_name}<br /><span className="text-xs text-slate-400">{member.username || 'No login'}</span></td><td>{member.username || '-'}</td><td>{member.email}</td><td>{member.member_code}</td><td>{member.status}</td><td>{currency(member.late_fee_balance)}</td>
+              <td>{member.full_name}<br /><span className="text-xs text-slate-400">{member.username || 'No login'}</span></td><td>{member.username || '-'}</td><td>{member.email}</td><td>{member.member_code}</td><td>{member.status}</td><td>{currency(member.account_balance || 0)}</td><td>{currency(member.late_fee_balance)}</td>
               <td><button className="danger-button" onClick={() => setModal({ type: 'delete', member })}><Trash2 size={16} /></button></td>
             </tr>
           ))}</tbody>
@@ -426,7 +439,7 @@ function Members({ members, toast, reloadMembers, search }) {
   );
 }
 
-function Loans({ user, loans, toast, reloadLoans, search }) {
+function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, reloadProfile }) {
   const [receipt, setReceipt] = useState(null);
   const [loadingActions, setLoadingActions] = useState({});
   const filteredLoans = useMemo(() => {
@@ -450,12 +463,17 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
     }
   };
   const pay = async (loan) => {
-    const penalty = await api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST' }).catch(() => null);
-    return penalty;
+    return api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST' });
   };
   return (
     <section className="panel">
-      <h2 className="section-title">{user.role === 'admin' ? 'All Borrow/Return Transactions' : 'My Borrowing Status'}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="section-title">{user.role === 'admin' ? 'All Borrow/Return Transactions' : 'My Borrowing Status'}</h2>
+          {user.role === 'member' && <p className="mt-1 text-sm text-slate-500">Wallet: {currency(profile?.account_balance || 0)} | Unpaid fine: {currency(profile?.late_fee_balance || 0)}</p>}
+        </div>
+        {user.role === 'member' && <button className="secondary-button" onClick={() => onTopUp(50000)}><CreditCard size={16} /> Top Up Rp 50.000</button>}
+      </div>
       <div className="mt-4 overflow-x-auto">
         <table className="table">
           <thead><tr><th>Book</th><th>Borrower</th><th>Status</th><th>Borrow Date</th><th>Due Date</th><th>Fine</th><th>Actions</th></tr></thead>
@@ -477,7 +495,7 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
                   <div className="flex flex-wrap gap-2">
                     {loan.status === 'Reserved' && <span className="text-sm text-slate-400">Waiting for librarian check-out</span>}
                     {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan.id, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
-                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { const data = await pay(loan); if (data) { toast('Fine paid'); setReceipt(data.receipt); reloadLoans(); } }}><CreditCard size={16} /> Pay Fine</button>}
+                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { try { const data = await pay(loan); toast('Fine paid'); setReceipt(data.receipt); reloadLoans(); reloadProfile(); } catch (error) { toast(error.message, 'error'); } }}><CreditCard size={16} /> Pay Fine</button>}
                     {loan.status === 'Returned' && loan.fine_status !== 'Unpaid' && <span className="text-sm text-slate-400">Completed</span>}
                   </div>
                 )}
@@ -512,6 +530,7 @@ export default function App() {
   const [loans, setLoans] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [settings, setSettings] = useState({ dailyFineRate: 2500 });
+  const [profile, setProfile] = useState(null);
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState('');
   const notify = (message, type = 'success') => setToast({ message, type });
@@ -520,16 +539,18 @@ export default function App() {
   const loadLoans = () => api('/loans').then(setLoans).catch((error) => notify(error.message, 'error'));
   const loadMembers = () => user?.role === 'admin' && api('/members').then(setMembers).catch((error) => notify(error.message, 'error'));
   const loadDashboard = () => user?.role === 'admin' && api('/dashboard').then(setDashboard).catch((error) => notify(error.message, 'error'));
+  const loadProfile = () => api('/me').then((data) => setProfile(data.member || null)).catch((error) => notify(error.message, 'error'));
 
   useEffect(() => {
     const token = localStorage.getItem('bookworm_token');
-    if (token) api('/me').then(setUser).catch(() => localStorage.removeItem('bookworm_token'));
+    if (token) api('/me').then((data) => { setUser(data); setProfile(data.member || null); }).catch(() => localStorage.removeItem('bookworm_token'));
   }, []);
 
   useEffect(() => {
     if (!user) return;
     loadBooks();
     loadLoans();
+    if (user.role === 'member') loadProfile();
     if (user.role === 'admin') {
       loadMembers();
       loadDashboard();
@@ -550,21 +571,32 @@ export default function App() {
     }
   };
 
+  const topUp = async (amount = 50000) => {
+    try {
+      const data = await api('/wallet/topup', { method: 'POST', body: JSON.stringify({ amount }) });
+      setProfile((current) => ({ ...(current || {}), account_balance: data.account_balance, late_fee_balance: data.late_fee_balance }));
+      notify(`Top up successful: ${currency(data.amount)}`);
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  };
+
   if (!user) return <><Login onLogin={setUser} toast={notify} /><Toast toast={toast} clear={() => setToast(null)} /></>;
 
   const logout = () => {
     localStorage.removeItem('bookworm_token');
     setUser(null);
+    setProfile(null);
     setActive('Dashboard');
   };
 
   return (
     <>
       <Shell user={user} onLogout={logout} active={active} setActive={setActive} search={search} setSearch={setSearch}>
-        {active === 'Dashboard' && <Dashboard user={user} data={dashboard} reload={loadDashboard} settings={settings} saveRate={saveRate} books={books} setActive={setActive} search={search} />}
+        {active === 'Dashboard' && <Dashboard user={user} data={dashboard} reload={loadDashboard} settings={settings} saveRate={saveRate} books={books} setActive={setActive} search={search} profile={profile} onTopUp={topUp} />}
         {active === 'Books/Cataloging' && <Books user={user} books={books} setBooks={setBooks} toast={notify} reloadBooks={() => { loadBooks(); loadLoans(); loadDashboard(); }} search={search} />}
         {active === 'Members' && user.role === 'admin' && <Members members={members} toast={notify} reloadMembers={() => { loadMembers(); loadDashboard(); }} search={search} />}
-        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} />}
+        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} profile={profile} onTopUp={topUp} reloadProfile={loadProfile} />}
       </Shell>
       <Toast toast={toast} clear={() => setToast(null)} />
     </>

@@ -447,12 +447,13 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
     if (!keyword) return loans;
     return loans.filter((loan) => `${loan.title} ${loan.full_name} ${loan.email} ${loan.status} ${loan.due_date}`.toLowerCase().includes(keyword));
   }, [loans, search]);
-  const act = async (id, action) => {
+  const act = async (loan, action) => {
+    const id = loan.id;
     const key = `${id}:${action}`;
     if (loadingActions[key]) return;
     setLoadingActions((current) => ({ ...current, [key]: true }));
     try {
-      await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action }) });
+      await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action, loan }) });
       toast('Loan updated');
       reloadLoans();
     } catch (error) {
@@ -486,16 +487,16 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
               <td>
                 {user.role === 'admin' ? (
                   <div className="flex flex-wrap gap-2">
-                    {loan.status === 'Reserved' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkout`]} onClick={() => act(loan.id, 'checkout')}>{loadingActions[`${loan.id}:checkout`] && <Loader2 size={15} className="animate-spin" />}Check-Out</button>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkin`]} onClick={() => act(loan.id, 'checkin')}>{loadingActions[`${loan.id}:checkin`] && <Loader2 size={15} className="animate-spin" />}Check-In</button>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:renew`]} onClick={() => act(loan.id, 'renew')}>{loadingActions[`${loan.id}:renew`] ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}Renew</button>}
-                    {loan.status === 'Borrowed' && <button className="danger-button" disabled={loadingActions[`${loan.id}:simulateOverdue`]} onClick={() => act(loan.id, 'simulateOverdue')}>{loadingActions[`${loan.id}:simulateOverdue`] && <Loader2 size={15} className="animate-spin" />}Test Fine</button>}
-                    {loan.status === 'Reserved' && <button className="danger-button" disabled={loadingActions[`${loan.id}:cancel`]} onClick={() => act(loan.id, 'cancel')}>{loadingActions[`${loan.id}:cancel`] && <Loader2 size={15} className="animate-spin" />}Cancel</button>}
+                    {loan.status === 'Reserved' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkout`]} onClick={() => act(loan, 'checkout')}>{loadingActions[`${loan.id}:checkout`] && <Loader2 size={15} className="animate-spin" />}Check-Out</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkin`]} onClick={() => act(loan, 'checkin')}>{loadingActions[`${loan.id}:checkin`] && <Loader2 size={15} className="animate-spin" />}Check-In</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:renew`]} onClick={() => act(loan, 'renew')}>{loadingActions[`${loan.id}:renew`] ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}Renew</button>}
+                    {loan.status === 'Borrowed' && <button className="danger-button" disabled={loadingActions[`${loan.id}:simulateOverdue`]} onClick={() => act(loan, 'simulateOverdue')}>{loadingActions[`${loan.id}:simulateOverdue`] && <Loader2 size={15} className="animate-spin" />}Test Fine</button>}
+                    {loan.status === 'Reserved' && <button className="danger-button" disabled={loadingActions[`${loan.id}:cancel`]} onClick={() => act(loan, 'cancel')}>{loadingActions[`${loan.id}:cancel`] && <Loader2 size={15} className="animate-spin" />}Cancel</button>}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {loan.status === 'Reserved' && <span className="text-sm text-slate-400">Waiting for librarian check-out</span>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan.id, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
                     {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { try { const data = await pay(loan); toast('Fine paid'); setReceipt(data.receipt); reloadLoans(); reloadProfile(); } catch (error) { toast(error.message, 'error'); } }}><CreditCard size={16} /> Pay Fine</button>}
                     {loan.status === 'Returned' && loan.fine_status !== 'Unpaid' && <span className="text-sm text-slate-400">Completed</span>}
                   </div>

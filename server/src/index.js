@@ -168,6 +168,36 @@ function refreshAllBookStatuses() {
   all('SELECT id FROM books').forEach((book) => refreshBookStatus(book.id));
 }
 
+function recoverLoanFromSnapshot(transactionId, snapshot) {
+  if (!snapshot || Number(snapshot.id) !== Number(transactionId)) return null;
+  if (!['Reserved', 'Borrowed', 'Returned', 'Cancelled'].includes(snapshot.status)) return null;
+  if (!get('SELECT id FROM books WHERE id = ?', [snapshot.book_id])) return null;
+  if (!get('SELECT id FROM members WHERE id = ?', [snapshot.member_id])) return null;
+
+  const today = formatWibDate();
+  const receipt = snapshot.receipt_number || `BW-RECOVER-${transactionId}-${Date.now()}`;
+  insert(
+    `INSERT INTO transactions (id, book_id, member_id, type, status, borrow_date, due_date, return_date, receipt_number, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      Number(transactionId),
+      snapshot.book_id,
+      snapshot.member_id,
+      snapshot.type || (snapshot.status === 'Reserved' ? 'Reservation' : 'Borrow'),
+      snapshot.status,
+      snapshot.borrow_date || today,
+      snapshot.due_date || addDaysWib(14),
+      snapshot.return_date || null,
+      receipt,
+      snapshot.created_at || today
+    ]
+  );
+  if (['Reserved', 'Borrowed'].includes(snapshot.status)) {
+    run('UPDATE books SET status = ?, updated_at = ? WHERE id = ?', [snapshot.status, today, snapshot.book_id]);
+  }
+  return get('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+}
+
 app.get('/api/health', (req, res) => res.json({ ok: true, date: formatWibDate() }));
 
 app.post('/api/auth/login', (req, res) => {
@@ -356,7 +386,7 @@ app.post('/api/reservations', auth('member'), (req, res) => {
 });
 
 app.patch('/api/loans/:id/action', auth(), (req, res) => {
-  const loan = get('SELECT * FROM transactions WHERE id = ?', [req.params.id]);
+  const loan = get('SELECT * FROM transactions WHERE id = ?', [req.params.id]) || recoverLoanFromSnapshot(req.params.id, req.body.loan);
   if (!loan) return res.status(404).json({ message: 'Transaction not found' });
   const today = formatWibDate();
 

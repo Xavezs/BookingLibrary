@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookWorm Member Manual</title>
+  <style>
+    :root {
+      --ink: #06142f;
+      --muted: #50627f;
+      --line: #dbe4f0;
+      --soft: #f3f7fb;
+      --navy: #0f1f3d;
+      --accent: #7c3aed;
+      --green: #dcfce7;
+      --red: #fee2e2;
+      --yellow: #fef3c7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef3f8;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+    .page {
+      max-width: 980px;
+      margin: 28px auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 18px 45px rgba(6, 20, 47, 0.08);
+      overflow: hidden;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 38px 44px;
+    }
+    header p { color: #c7d7f2; margin: 8px 0 0; }
+    h1 { margin: 0; font-size: 34px; line-height: 1.1; }
+    h2 { margin: 32px 0 12px; font-size: 24px; border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    main { padding: 34px 44px 44px; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 22px 0 6px;
+    }
+    .card, .step, .note {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .card { padding: 16px; }
+    .card strong { display: block; margin-bottom: 4px; }
+    .toc {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 22px;
+    }
+    .toc ol { margin: 0; padding-left: 22px; }
+    .step {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 14px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .num {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+    .highlight {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #ede9fe;
+      color: #5b21b6;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .button {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+    .secondary { background: #eef2ff; color: #1e3a8a; }
+    .danger { background: #fee2e2; color: #b91c1c; }
+    .note {
+      background: #fffbeb;
+      border-color: #facc15;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 24px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th { background: var(--soft); text-align: left; }
+    .badge { border-radius: 999px; padding: 3px 9px; font-weight: 700; font-size: 12px; }
+    .available { background: var(--green); color: #047857; }
+    .reserved { background: var(--yellow); color: #b45309; }
+    .borrowed { background: var(--red); color: #b91c1c; }
+    .screen {
+      border: 1px dashed #9fb0c8;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fff, #f8fbff);
+      padding: 16px;
+      margin: 14px 0 20px;
+    }
+    .screen-title { font-weight: 700; margin-bottom: 8px; }
+    .mock-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+    .footer {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 36px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; max-width: none; border: 0; box-shadow: none; border-radius: 0; }
+      header { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      h2 { page-break-after: avoid; }
+      .step, .card, table, .screen { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <h1>BookWorm Member Manual</h1>
+      <p>Manual penggunaan untuk Member/User: registrasi, login, mencari buku, reservasi, return, top up, dan bayar denda.</p>
+      <div class="meta">
+        <div class="card"><strong>Role</strong>Member / Student / Faculty</div>
+        <div class="card"><strong>Demo Login</strong>vinlee / 123123</div>
+        <div class="card"><strong>App</strong>BookWorm Library</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="toc">
+        <strong>Daftar Isi</strong>
+        <ol>
+          <li>Login dan Registrasi</li>
+          <li>Dashboard Member</li>
+          <li>Cari dan Reserve Buku</li>
+          <li>Melihat Status Pinjaman</li>
+          <li>Return Book</li>
+          <li>Top Up dan Bayar Denda</li>
+          <li>Troubleshooting</li>
+        </ol>
+      </section>
+
+      <h2>1. Login dan Registrasi</h2>
+      <h3>Login Demo</h3>
+      <div class="step"><div class="num">1</div><div>Buka halaman BookWorm.</div></div>
+      <div class="step"><div class="num">2</div><div>Isi <span class="highlight">Username</span> dengan <strong>vinlee</strong> dan <span class="highlight">Password</span> dengan <strong>123123</strong>.</div></div>
+      <div class="step"><div class="num">3</div><div>Klik <span class="button">Login</span>. Jika berhasil, aplikasi masuk ke <strong>Member dashboard</strong>.</div></div>
+
+      <h3>Registrasi Member Baru</h3>
+      <div class="step"><div class="num">1</div><div>Pada halaman login, klik <span class="highlight">Create a member account</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Isi Username, Password, Full Name, Email, Member ID, dan Status.</div></div>
+      <div class="step"><div class="num">3</div><div>Klik <span class="button">Register</span>. Jika berhasil, kembali ke login dan masuk memakai username baru.</div></div>
+      <table>
+        <thead><tr><th>Field</th><th>Aturan</th><th>Contoh</th></tr></thead>
+        <tbody>
+          <tr><td>Username</td><td>Harus unik.</td><td>vinlee</td></tr>
+          <tr><td>Password</td><td>Minimal 6 karakter.</td><td>123123</td></tr>
+          <tr><td>Email</td><td>Format email valid dan unik.</td><td>vincentlee2555@gmail.com</td></tr>
+          <tr><td>Member ID</td><td>10 karakter, diawali angka 2.</td><td>2802424972</td></tr>
+          <tr><td>Status</td><td>Student atau Faculty.</td><td>Student</td></tr>
+        </tbody>
+      </table>
+
+      <h2>2. Dashboard Member</h2>
+      <div class="screen">
+        <div class="screen-title">Workspace: Dashboard</div>
+        <div class="mock-row"><span>Wallet Balance</span><strong>Rp 0</strong></div>
+        <div class="mock-row"><span>Unpaid Fine</span><strong>Rp 0</strong></div>
+        <div class="mock-row"><span>Available Books</span><span class="badge available">Available</span></div>
+      </div>
+      <p>Dashboard member memperlihatkan saldo wallet, denda unpaid, dan daftar buku yang tersedia.</p>
+      <div class="note"><strong>Catatan:</strong> Pada deployment Vercel demo, wallet disimpan juga di browser agar tidak hilang ketika serverless instance berubah.</div>
+
+      <h2>3. Cari dan Reserve Buku</h2>
+      <div class="step"><div class="num">1</div><div>Klik menu <span class="highlight">Books/Cataloging</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Gunakan search box untuk mencari berdasarkan title, author, atau ISBN.</div></div>
+      <div class="step"><div class="num">3</div><div>Pilih buku dengan status <span class="badge available">Available</span>.</div></div>
+      <div class="step"><div class="num">4</div><div>Klik <span class="button">Reserve</span>, lalu klik <span class="button">Confirm</span> pada modal konfirmasi.</div></div>
+      <div class="step"><div class="num">5</div><div>Sistem menampilkan receipt reservasi berisi title, author, borrower email, borrower number, borrow date, dan due date.</div></div>
+      <div class="note"><strong>Business rule:</strong> Member tidak bisa membuat reservasi baru jika masih memiliki unpaid fine.</div>
+
+      <h2>4. Melihat Status Pinjaman</h2>
+      <p>Buka menu <span class="highlight">Library Loan</span>. Tabel ini menampilkan riwayat dan status transaksi member.</p>
+      <table>
+        <thead><tr><th>Status</th><th>Arti untuk Member</th><th>Aksi yang Tersedia</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge reserved">Reserved</span></td><td>Buku sudah dibooking, menunggu admin melakukan Check-Out.</td><td>Tunggu librarian.</td></tr>
+          <tr><td><span class="badge borrowed">Borrowed</span></td><td>Buku resmi sedang dipinjam.</td><td>Return Book. Jika overdue, bisa muncul Pay Fine.</td></tr>
+          <tr><td>Returned</td><td>Buku sudah dikembalikan.</td><td>Completed atau Pay Fine jika masih ada denda.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>5. Return Book</h2>
+      <div class="step"><div class="num">1</div><div>Buka <span class="highlight">Library Loan</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Cari transaksi dengan status <span class="badge borrowed">Borrowed</span>.</div></div>
+      <div class="step"><div class="num">3</div><div>Klik <span class="button secondary">Return Book</span>.</div></div>
+      <div class="step"><div class="num">4</div><div>Jika buku terlambat, sistem menghitung denda berdasarkan due date dan daily fine rate.</div></div>
+
+      <h2>6. Top Up dan Bayar Denda</h2>
+      <h3>Top Up Wallet</h3>
+      <div class="step"><div class="num">1</div><div>Pada Dashboard atau Library Loan, klik tombol <span class="button secondary">Top Up</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Saldo wallet bertambah untuk kebutuhan demo pembayaran denda.</div></div>
+      <h3>Bayar Fine</h3>
+      <div class="step"><div class="num">1</div><div>Buka <span class="highlight">Library Loan</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Jika ada fine dengan badge <span class="badge borrowed">Unpaid</span>, klik <span class="button">Pay Fine</span>.</div></div>
+      <div class="step"><div class="num">3</div><div>Jika saldo cukup, sistem memotong wallet dan menampilkan payment receipt.</div></div>
+      <table>
+        <thead><tr><th>Kondisi</th><th>Hasil</th></tr></thead>
+        <tbody>
+          <tr><td>Wallet cukup</td><td>Fine berubah Paid, wallet berkurang, unpaid fine menjadi 0.</td></tr>
+          <tr><td>Wallet tidak cukup</td><td>Sistem menampilkan pesan untuk top up terlebih dahulu.</td></tr>
+          <tr><td>Tidak ada fine</td><td>Kolom fine menampilkan tanda minus dan tombol Pay Fine tidak muncul.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>7. Troubleshooting Member</h2>
+      <table>
+        <thead><tr><th>Masalah</th><th>Penyebab Umum</th><th>Solusi</th></tr></thead>
+        <tbody>
+          <tr><td>Failed to fetch</td><td>Browser masih memakai bundle lama yang mengarah ke localhost.</td><td>Hard refresh: Ctrl + Shift + R atau buka incognito.</td></tr>
+          <tr><td>Wallet kembali 0</td><td>State Vercel serverless berpindah instance.</td><td>Gunakan deployment terbaru dan browser yang sama. Untuk demo paling stabil, jalankan lokal.</td></tr>
+          <tr><td>Reserve ditolak</td><td>Buku tidak Available atau masih ada unpaid fine.</td><td>Pilih buku lain atau bayar denda terlebih dahulu.</td></tr>
+          <tr><td>Pay Fine gagal</td><td>Saldo wallet kurang atau data fine belum sync.</td><td>Top up, refresh Library Loan, lalu klik Pay Fine lagi.</td></tr>
+          <tr><td>Login gagal</td><td>Username/password salah atau akun belum dibuat.</td><td>Gunakan vinlee / 123123 untuk demo.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="footer">
+        BookWorm Member Manual. Untuk demo paling stabil, jalankan aplikasi secara lokal dengan <strong>npm run dev</strong>.
+      </div>
+    </main>
+  </article>
+</body>
+</html>

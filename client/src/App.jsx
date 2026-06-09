@@ -439,7 +439,7 @@ function Members({ members, toast, reloadMembers, search }) {
   );
 }
 
-function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, reloadProfile }) {
+function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, reloadProfile, onProfileChange, onLoanChange }) {
   const [receipt, setReceipt] = useState(null);
   const [loadingActions, setLoadingActions] = useState({});
   const filteredLoans = useMemo(() => {
@@ -453,9 +453,10 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
     if (loadingActions[key]) return;
     setLoadingActions((current) => ({ ...current, [key]: true }));
     try {
-      await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action, loan }) });
+      const data = await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action, loan }) });
       toast('Loan updated');
-      reloadLoans();
+      if (data.transaction) onLoanChange?.(data.transaction);
+      else reloadLoans();
     } catch (error) {
       const friendly = Object.entries(friendlyErrors).find(([needle]) => error.message.includes(needle))?.[1];
       toast(friendly || error.message, 'error');
@@ -464,7 +465,7 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
     }
   };
   const pay = async (loan) => {
-    return api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST' });
+    return api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST', body: JSON.stringify({ loan, profile }) });
   };
   return (
     <section className="panel">
@@ -497,7 +498,7 @@ function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, relo
                   <div className="flex flex-wrap gap-2">
                     {loan.status === 'Reserved' && <span className="text-sm text-slate-400">Waiting for librarian check-out</span>}
                     {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
-                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { try { const data = await pay(loan); toast('Fine paid'); setReceipt(data.receipt); reloadLoans(); reloadProfile(); } catch (error) { toast(error.message, 'error'); } }}><CreditCard size={16} /> Pay Fine</button>}
+                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { try { const data = await pay(loan); toast('Fine paid'); setReceipt(data.receipt); onProfileChange?.({ ...(profile || {}), account_balance: data.receipt.wallet_balance, late_fee_balance: data.receipt.unpaid_fine_balance }); reloadLoans(); reloadProfile(); } catch (error) { toast(error.message, 'error'); } }}><CreditCard size={16} /> Pay Fine</button>}
                     {loan.status === 'Returned' && loan.fine_status !== 'Unpaid' && <span className="text-sm text-slate-400">Completed</span>}
                   </div>
                 )}
@@ -547,6 +548,31 @@ function Receipt({ details }) {
   );
 }
 
+function storedProfileKey(username) {
+  return username ? `bookworm_profile_${username}` : null;
+}
+
+function readStoredProfile(username) {
+  const key = storedProfileKey(username);
+  if (!key) return null;
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProfile(username, profile) {
+  const key = storedProfileKey(username);
+  if (key && profile) localStorage.setItem(key, JSON.stringify(profile));
+}
+
+function mergeStoredProfile(username, profile) {
+  const stored = readStoredProfile(username);
+  if (!stored) return profile;
+  return { ...(profile || {}), ...stored };
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [active, setActive] = useState('Dashboard');
@@ -564,11 +590,15 @@ export default function App() {
   const loadLoans = () => api('/loans').then(setLoans).catch((error) => notify(error.message, 'error'));
   const loadMembers = () => user?.role === 'admin' && api('/members').then(setMembers).catch((error) => notify(error.message, 'error'));
   const loadDashboard = () => user?.role === 'admin' && api('/dashboard').then(setDashboard).catch((error) => notify(error.message, 'error'));
-  const loadProfile = () => api('/me').then((data) => setProfile(data.member || null)).catch((error) => notify(error.message, 'error'));
+  const setAndStoreProfile = (nextProfile, username = user?.username) => {
+    setProfile(nextProfile || null);
+    writeStoredProfile(username, nextProfile);
+  };
+  const loadProfile = () => api('/me').then((data) => setAndStoreProfile(mergeStoredProfile(data.username, data.member || null), data.username)).catch((error) => notify(error.message, 'error'));
 
   useEffect(() => {
     const token = localStorage.getItem('bookworm_token');
-    if (token) api('/me').then((data) => { setUser(data); setProfile(data.member || null); }).catch(() => localStorage.removeItem('bookworm_token'));
+    if (token) api('/me').then((data) => { setUser(data); setAndStoreProfile(mergeStoredProfile(data.username, data.member || null), data.username); }).catch(() => localStorage.removeItem('bookworm_token'));
   }, []);
 
   useEffect(() => {
@@ -599,7 +629,12 @@ export default function App() {
   const topUp = async (amount = 50000) => {
     try {
       const data = await api('/wallet/topup', { method: 'POST', body: JSON.stringify({ amount }) });
-      setProfile((current) => ({ ...(current || {}), account_balance: data.account_balance, late_fee_balance: data.late_fee_balance }));
+      const nextProfile = {
+        ...(profile || {}),
+        account_balance: Math.max(Number(data.account_balance || 0), Number(profile?.account_balance || 0) + Number(data.amount || amount)),
+        late_fee_balance: Number(data.late_fee_balance ?? profile?.late_fee_balance ?? 0)
+      };
+      setAndStoreProfile(nextProfile);
       notify(`Top up successful: ${currency(data.amount)}`);
     } catch (error) {
       notify(error.message, 'error');
@@ -621,7 +656,7 @@ export default function App() {
         {active === 'Dashboard' && <Dashboard user={user} data={dashboard} reload={loadDashboard} settings={settings} saveRate={saveRate} books={books} setActive={setActive} search={search} profile={profile} onTopUp={topUp} />}
         {active === 'Books/Cataloging' && <Books user={user} books={books} setBooks={setBooks} toast={notify} reloadBooks={() => { loadBooks(); loadLoans(); loadDashboard(); }} search={search} />}
         {active === 'Members' && user.role === 'admin' && <Members members={members} toast={notify} reloadMembers={() => { loadMembers(); loadDashboard(); }} search={search} />}
-        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} profile={profile} onTopUp={topUp} reloadProfile={loadProfile} />}
+        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} profile={profile} onTopUp={topUp} reloadProfile={loadProfile} onProfileChange={(nextProfile) => setAndStoreProfile(nextProfile)} onLoanChange={(updatedLoan) => setLoans((current) => current.map((loan) => loan.id === updatedLoan.id ? { ...loan, ...updatedLoan } : loan))} />}
       </Shell>
       <Toast toast={toast} clear={() => setToast(null)} />
     </>

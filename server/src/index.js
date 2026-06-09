@@ -198,6 +198,32 @@ function recoverLoanFromSnapshot(transactionId, snapshot) {
   return get('SELECT * FROM transactions WHERE id = ?', [transactionId]);
 }
 
+function hydrateMemberFromSnapshot(memberId, snapshot) {
+  if (!snapshot || Number(snapshot.id) !== Number(memberId)) return;
+  const balance = Math.max(0, Math.round(Number(snapshot.account_balance || 0)));
+  const fineBalance = Math.max(0, Math.round(Number(snapshot.late_fee_balance || 0)));
+  run(
+    'UPDATE members SET account_balance = MAX(account_balance, ?), late_fee_balance = MAX(late_fee_balance, ?) WHERE id = ?',
+    [balance, fineBalance, memberId]
+  );
+}
+
+function recoverPenaltyFromLoanSnapshot(loanSnapshot) {
+  if (!loanSnapshot || Number(loanSnapshot.fine_amount || 0) <= 0) return null;
+  const loan = get('SELECT * FROM transactions WHERE id = ?', [loanSnapshot.id]) || recoverLoanFromSnapshot(loanSnapshot.id, loanSnapshot);
+  if (!loan) return null;
+  const existing = get('SELECT * FROM penalties WHERE transaction_id = ?', [loan.id]);
+  if (existing) return existing;
+  const fineAmount = Math.max(0, Math.round(Number(loanSnapshot.fine_amount || 0)));
+  const lateDuration = Math.max(0, Math.round(Number(loanSnapshot.late_duration || 0)));
+  insert(
+    'INSERT INTO penalties (transaction_id, member_id, fine_amount, late_duration, status) VALUES (?, ?, ?, ?, ?)',
+    [loan.id, loan.member_id, fineAmount, lateDuration, loanSnapshot.fine_status || 'Unpaid']
+  );
+  refreshMemberBalance(loan.member_id);
+  return get('SELECT * FROM penalties WHERE transaction_id = ?', [loan.id]);
+}
+
 app.get('/api/health', (req, res) => res.json({ ok: true, date: formatWibDate() }));
 
 app.post('/api/auth/login', (req, res) => {
@@ -432,12 +458,20 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
 });
 
 app.post('/api/penalties/:id/pay', auth('member'), (req, res) => {
-  const penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [req.params.id]);
+  let penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [req.params.id]);
+  if (!penalty) {
+    const recovered = recoverPenaltyFromLoanSnapshot(req.body.loan);
+    if (recovered) {
+      penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [recovered.id]);
+    }
+  }
   if (!penalty) return res.status(404).json({ message: 'Fine not found' });
   if (penalty.status === 'Paid') return badRequest(res, 'This fine is already paid');
   const member = get('SELECT * FROM members WHERE user_id = ?', [req.user.id]);
   if (!member || member.id !== penalty.member_id) return res.status(403).json({ message: 'Cannot pay another member fine' });
-  if (member.account_balance < penalty.fine_amount) return badRequest(res, 'Insufficient balance. Please top up first');
+  hydrateMemberFromSnapshot(member.id, req.body.profile);
+  const payableMember = get('SELECT * FROM members WHERE id = ?', [member.id]);
+  if (payableMember.account_balance < penalty.fine_amount) return badRequest(res, 'Insufficient balance. Please top up first');
 
   const paidAt = formatWibDate();
   const result = transaction(() => {

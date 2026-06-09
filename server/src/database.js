@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
@@ -7,7 +8,7 @@ import { DEFAULT_DAILY_FINE_RATE, formatWibDate } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
-const dataDir = isServerless ? path.join('/tmp', 'bookworm-data') : path.resolve(__dirname, '..', 'data');
+const dataDir = isServerless ? path.join(os.tmpdir(), 'bookworm-data') : path.resolve(__dirname, '..', 'data');
 const dbFile = path.join(dataDir, 'bookworm.sqlite');
 let SQL;
 let db;
@@ -21,7 +22,8 @@ function persist() {
 
 function valuesFromParams(params) {
   if (!params) return [];
-  return Array.isArray(params) ? params : Object.values(params);
+  const values = Array.isArray(params) ? params : Object.values(params);
+  return values.map((value) => (value === undefined ? null : value));
 }
 
 export async function initDatabase() {

@@ -4,6 +4,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
+    "build": "cd .. && npm run build --workspace client && node server/scripts/copy-client-dist.mjs",
     "dev": "node --watch src/index.js",
     "start": "node src/index.js"
   },

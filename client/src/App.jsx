@@ -81,7 +81,7 @@ function Login({ onLogin, toast }) {
           <h1 className="text-5xl font-bold leading-tight">Borrow, reserve, return, and reconcile fines in one calm desk.</h1>
           <p className="mt-6 text-lg text-blue-100">Role-based dashboards for librarians and members, backed by JWT auth and local SQLite persistence.</p>
         </div>
-        <p className="text-sm text-blue-100">Demo admin: admin / admin123 · Demo member: student / student123</p>
+        <p className="text-sm text-blue-100">Demo admin: admin / 123123 - Demo member: vinlee / 123123</p>
       </section>
       <section className="flex items-center justify-center p-6">
         <form onSubmit={submit} className="w-full max-w-md rounded-lg bg-white p-7 shadow-xl">
@@ -155,7 +155,7 @@ function Shell({ user, onLogout, children, active, setActive, search, setSearch 
   );
 }
 
-function Dashboard({ user, data, reload, settings, saveRate, books, setActive, search }) {
+function Dashboard({ user, data, reload, settings, saveRate, books, setActive, search, profile, onTopUp }) {
   const [range, setRange] = useState('weekly');
   if (user.role !== 'admin') {
     const keyword = (search || '').trim().toLowerCase();
@@ -169,11 +169,24 @@ function Dashboard({ user, data, reload, settings, saveRate, books, setActive, s
           <div className="panel lg:col-span-2">
             <h2 className="section-title">Welcome back, {user.name}</h2>
             <p className="mt-2 text-slate-600">Browse available books, reserve titles, and pay fines before creating new reservations.</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm text-slate-500">Wallet Balance</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{currency(profile?.account_balance || 0)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm text-slate-500">Unpaid Fine</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{currency(profile?.late_fee_balance || 0)}</p>
+              </div>
+            </div>
           </div>
           <div className="panel">
             <h3 className="section-title">Need a book?</h3>
             <p className="mt-2 text-sm text-slate-500">Open Books/Cataloging and reserve anything marked Available.</p>
-            <button className="primary-button mt-4" onClick={() => setActive('Books/Cataloging')}>Browse Catalog</button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="primary-button" onClick={() => setActive('Books/Cataloging')}>Browse Catalog</button>
+              <button className="secondary-button" onClick={() => onTopUp(50000)}><CreditCard size={16} /> Top Up</button>
+            </div>
           </div>
         </div>
         <div className="panel">
@@ -394,10 +407,10 @@ function Members({ members, toast, reloadMembers, search }) {
       <div className="mb-4 flex items-center justify-between"><h2 className="section-title">Members</h2><button className="primary-button" onClick={() => setModal(emptyMember)}><UserPlus size={17} /> Add Member</button></div>
       <div className="overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>ID</th><th>Status</th><th>Balance</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>ID</th><th>Status</th><th>Wallet</th><th>Unpaid Fine</th><th></th></tr></thead>
           <tbody>{filteredMembers.map((member) => (
             <tr key={member.id}>
-              <td>{member.full_name}<br /><span className="text-xs text-slate-400">{member.username || 'No login'}</span></td><td>{member.username || '-'}</td><td>{member.email}</td><td>{member.member_code}</td><td>{member.status}</td><td>{currency(member.late_fee_balance)}</td>
+              <td>{member.full_name}<br /><span className="text-xs text-slate-400">{member.username || 'No login'}</span></td><td>{member.username || '-'}</td><td>{member.email}</td><td>{member.member_code}</td><td>{member.status}</td><td>{currency(member.account_balance || 0)}</td><td>{currency(member.late_fee_balance)}</td>
               <td><button className="danger-button" onClick={() => setModal({ type: 'delete', member })}><Trash2 size={16} /></button></td>
             </tr>
           ))}</tbody>
@@ -426,7 +439,7 @@ function Members({ members, toast, reloadMembers, search }) {
   );
 }
 
-function Loans({ user, loans, toast, reloadLoans, search }) {
+function Loans({ user, loans, toast, reloadLoans, search, profile, onTopUp, reloadProfile, onProfileChange, onLoanChange }) {
   const [receipt, setReceipt] = useState(null);
   const [loadingActions, setLoadingActions] = useState({});
   const filteredLoans = useMemo(() => {
@@ -434,14 +447,16 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
     if (!keyword) return loans;
     return loans.filter((loan) => `${loan.title} ${loan.full_name} ${loan.email} ${loan.status} ${loan.due_date}`.toLowerCase().includes(keyword));
   }, [loans, search]);
-  const act = async (id, action) => {
+  const act = async (loan, action) => {
+    const id = loan.id;
     const key = `${id}:${action}`;
     if (loadingActions[key]) return;
     setLoadingActions((current) => ({ ...current, [key]: true }));
     try {
-      await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action }) });
+      const data = await api(`/loans/${id}/action`, { method: 'PATCH', body: JSON.stringify({ action, loan }) });
       toast('Loan updated');
-      reloadLoans();
+      if (data.transaction) onLoanChange?.(data.transaction);
+      else reloadLoans();
     } catch (error) {
       const friendly = Object.entries(friendlyErrors).find(([needle]) => error.message.includes(needle))?.[1];
       toast(friendly || error.message, 'error');
@@ -450,12 +465,17 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
     }
   };
   const pay = async (loan) => {
-    const penalty = await api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST' }).catch(() => null);
-    return penalty;
+    return api(`/penalties/${loan.penalty_id || loan.id}/pay`, { method: 'POST', body: JSON.stringify({ loan, profile }) });
   };
   return (
     <section className="panel">
-      <h2 className="section-title">{user.role === 'admin' ? 'All Borrow/Return Transactions' : 'My Borrowing Status'}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="section-title">{user.role === 'admin' ? 'All Borrow/Return Transactions' : 'My Borrowing Status'}</h2>
+          {user.role === 'member' && <p className="mt-1 text-sm text-slate-500">Wallet: {currency(profile?.account_balance || 0)} | Unpaid fine: {currency(profile?.late_fee_balance || 0)}</p>}
+        </div>
+        {user.role === 'member' && <button className="secondary-button" onClick={() => onTopUp(50000)}><CreditCard size={16} /> Top Up Rp 50.000</button>}
+      </div>
       <div className="mt-4 overflow-x-auto">
         <table className="table">
           <thead><tr><th>Book</th><th>Borrower</th><th>Status</th><th>Borrow Date</th><th>Due Date</th><th>Fine</th><th>Actions</th></tr></thead>
@@ -468,16 +488,17 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
               <td>
                 {user.role === 'admin' ? (
                   <div className="flex flex-wrap gap-2">
-                    {loan.status === 'Reserved' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkout`]} onClick={() => act(loan.id, 'checkout')}>{loadingActions[`${loan.id}:checkout`] && <Loader2 size={15} className="animate-spin" />}Check-Out</button>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkin`]} onClick={() => act(loan.id, 'checkin')}>{loadingActions[`${loan.id}:checkin`] && <Loader2 size={15} className="animate-spin" />}Check-In</button>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:renew`]} onClick={() => act(loan.id, 'renew')}>{loadingActions[`${loan.id}:renew`] ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}Renew</button>}
-                    {loan.status === 'Reserved' && <button className="danger-button" disabled={loadingActions[`${loan.id}:cancel`]} onClick={() => act(loan.id, 'cancel')}>{loadingActions[`${loan.id}:cancel`] && <Loader2 size={15} className="animate-spin" />}Cancel</button>}
+                    {loan.status === 'Reserved' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkout`]} onClick={() => act(loan, 'checkout')}>{loadingActions[`${loan.id}:checkout`] && <Loader2 size={15} className="animate-spin" />}Check-Out</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:checkin`]} onClick={() => act(loan, 'checkin')}>{loadingActions[`${loan.id}:checkin`] && <Loader2 size={15} className="animate-spin" />}Check-In</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:renew`]} onClick={() => act(loan, 'renew')}>{loadingActions[`${loan.id}:renew`] ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}Renew</button>}
+                    {loan.status === 'Borrowed' && <button className="danger-button" disabled={loadingActions[`${loan.id}:simulateOverdue`]} onClick={() => act(loan, 'simulateOverdue')}>{loadingActions[`${loan.id}:simulateOverdue`] && <Loader2 size={15} className="animate-spin" />}Test Fine</button>}
+                    {loan.status === 'Reserved' && <button className="danger-button" disabled={loadingActions[`${loan.id}:cancel`]} onClick={() => act(loan, 'cancel')}>{loadingActions[`${loan.id}:cancel`] && <Loader2 size={15} className="animate-spin" />}Cancel</button>}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {loan.status === 'Reserved' && <span className="text-sm text-slate-400">Waiting for librarian check-out</span>}
-                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan.id, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
-                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { const data = await pay(loan); if (data) { toast('Fine paid'); setReceipt(data.receipt); reloadLoans(); } }}><CreditCard size={16} /> Pay Fine</button>}
+                    {loan.status === 'Borrowed' && <button className="secondary-button" disabled={loadingActions[`${loan.id}:return`]} onClick={() => act(loan, 'return')}>{loadingActions[`${loan.id}:return`] && <Loader2 size={15} className="animate-spin" />}Return Book</button>}
+                    {loan.fine_status === 'Unpaid' && <button className="primary-button" onClick={async () => { try { const data = await pay(loan); toast('Fine paid'); setReceipt(data.receipt); onProfileChange?.({ ...(profile || {}), account_balance: data.receipt.wallet_balance, late_fee_balance: data.receipt.unpaid_fine_balance }); reloadLoans(); reloadProfile(); } catch (error) { toast(error.message, 'error'); } }}><CreditCard size={16} /> Pay Fine</button>}
                     {loan.status === 'Returned' && loan.fine_status !== 'Unpaid' && <span className="text-sm text-slate-400">Completed</span>}
                   </div>
                 )}
@@ -492,16 +513,64 @@ function Loans({ user, loans, toast, reloadLoans, search }) {
 }
 
 function Receipt({ details }) {
+  const labels = {
+    receipt_number: 'Receipt Number',
+    book_title: 'Book Title',
+    borrower_email: 'Borrower Email',
+    borrower_number: 'Borrower Number',
+    borrow_date: 'Borrow Date',
+    due_date: 'Due Date',
+    paid_at: 'Paid At',
+    late_duration: 'Late Duration',
+    fine_amount: 'Fine Amount',
+    unpaid_fine_balance: 'Unpaid Fine Balance',
+    wallet_balance: 'Wallet Balance'
+  };
+  const rows = Object.entries(details || {})
+    .map(([key, value]) => {
+      if (value === null || value === undefined || value === '') return null;
+      let display = String(value);
+      if (['amount', 'balance', 'fine', 'wallet'].some((word) => key.includes(word))) display = currency(Number(value) || 0);
+      if (key === 'late_duration') display = `${value} days`;
+      return [key, display];
+    })
+    .filter(Boolean);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-      {Object.entries(details).map(([key, value]) => (
+      {rows.map(([key, value]) => (
         <div key={key} className="flex justify-between border-b border-slate-200 py-2 last:border-0">
-          <span className="font-semibold capitalize text-slate-500">{key.replaceAll('_', ' ')}</span>
-          <span className="text-right text-ink">{typeof value === 'number' && key.includes('amount') ? currency(value) : String(value)}</span>
+          <span className="font-semibold text-slate-500">{labels[key] || key.replaceAll('_', ' ')}</span>
+          <span className="text-right text-ink">{value}</span>
         </div>
       ))}
     </div>
   );
+}
+
+function storedProfileKey(username) {
+  return username ? `bookworm_profile_${username}` : null;
+}
+
+function readStoredProfile(username) {
+  const key = storedProfileKey(username);
+  if (!key) return null;
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProfile(username, profile) {
+  const key = storedProfileKey(username);
+  if (key && profile) localStorage.setItem(key, JSON.stringify(profile));
+}
+
+function mergeStoredProfile(username, profile) {
+  const stored = readStoredProfile(username);
+  if (!stored) return profile;
+  return { ...(profile || {}), ...stored };
 }
 
 export default function App() {
@@ -512,6 +581,7 @@ export default function App() {
   const [loans, setLoans] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [settings, setSettings] = useState({ dailyFineRate: 2500 });
+  const [profile, setProfile] = useState(null);
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState('');
   const notify = (message, type = 'success') => setToast({ message, type });
@@ -520,16 +590,22 @@ export default function App() {
   const loadLoans = () => api('/loans').then(setLoans).catch((error) => notify(error.message, 'error'));
   const loadMembers = () => user?.role === 'admin' && api('/members').then(setMembers).catch((error) => notify(error.message, 'error'));
   const loadDashboard = () => user?.role === 'admin' && api('/dashboard').then(setDashboard).catch((error) => notify(error.message, 'error'));
+  const setAndStoreProfile = (nextProfile, username = user?.username) => {
+    setProfile(nextProfile || null);
+    writeStoredProfile(username, nextProfile);
+  };
+  const loadProfile = () => api('/me').then((data) => setAndStoreProfile(mergeStoredProfile(data.username, data.member || null), data.username)).catch((error) => notify(error.message, 'error'));
 
   useEffect(() => {
     const token = localStorage.getItem('bookworm_token');
-    if (token) api('/me').then(setUser).catch(() => localStorage.removeItem('bookworm_token'));
+    if (token) api('/me').then((data) => { setUser(data); setAndStoreProfile(mergeStoredProfile(data.username, data.member || null), data.username); }).catch(() => localStorage.removeItem('bookworm_token'));
   }, []);
 
   useEffect(() => {
     if (!user) return;
     loadBooks();
     loadLoans();
+    if (user.role === 'member') loadProfile();
     if (user.role === 'admin') {
       loadMembers();
       loadDashboard();
@@ -550,21 +626,37 @@ export default function App() {
     }
   };
 
+  const topUp = async (amount = 50000) => {
+    try {
+      const data = await api('/wallet/topup', { method: 'POST', body: JSON.stringify({ amount }) });
+      const nextProfile = {
+        ...(profile || {}),
+        account_balance: Math.max(Number(data.account_balance || 0), Number(profile?.account_balance || 0) + Number(data.amount || amount)),
+        late_fee_balance: Number(data.late_fee_balance ?? profile?.late_fee_balance ?? 0)
+      };
+      setAndStoreProfile(nextProfile);
+      notify(`Top up successful: ${currency(data.amount)}`);
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  };
+
   if (!user) return <><Login onLogin={setUser} toast={notify} /><Toast toast={toast} clear={() => setToast(null)} /></>;
 
   const logout = () => {
     localStorage.removeItem('bookworm_token');
     setUser(null);
+    setProfile(null);
     setActive('Dashboard');
   };
 
   return (
     <>
       <Shell user={user} onLogout={logout} active={active} setActive={setActive} search={search} setSearch={setSearch}>
-        {active === 'Dashboard' && <Dashboard user={user} data={dashboard} reload={loadDashboard} settings={settings} saveRate={saveRate} books={books} setActive={setActive} search={search} />}
+        {active === 'Dashboard' && <Dashboard user={user} data={dashboard} reload={loadDashboard} settings={settings} saveRate={saveRate} books={books} setActive={setActive} search={search} profile={profile} onTopUp={topUp} />}
         {active === 'Books/Cataloging' && <Books user={user} books={books} setBooks={setBooks} toast={notify} reloadBooks={() => { loadBooks(); loadLoans(); loadDashboard(); }} search={search} />}
         {active === 'Members' && user.role === 'admin' && <Members members={members} toast={notify} reloadMembers={() => { loadMembers(); loadDashboard(); }} search={search} />}
-        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} />}
+        {active === 'Library Loan' && <Loans user={user} loans={loans} toast={notify} reloadLoans={() => { loadLoans(); loadBooks(); loadDashboard(); }} search={search} profile={profile} onTopUp={topUp} reloadProfile={loadProfile} onProfileChange={(nextProfile) => setAndStoreProfile(nextProfile)} onLoanChange={(updatedLoan) => setLoans((current) => current.map((loan) => loan.id === updatedLoan.id ? { ...loan, ...updatedLoan } : loan))} />}
       </Shell>
       <Toast toast={toast} clear={() => setToast(null)} />
     </>

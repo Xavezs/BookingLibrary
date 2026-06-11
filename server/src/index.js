@@ -11,14 +11,31 @@ import { addDaysWib, formatWibDate, normalizeEmail, overdueDays } from './utils.
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDist = path.resolve(__dirname, '..', '..', 'client', 'dist');
+const clientDistCandidates = [
+  path.resolve(__dirname, '..', 'public'),
+  path.resolve(__dirname, '..', '..', 'client', 'dist')
+];
+const clientDist = clientDistCandidates.find((candidate) => fs.existsSync(candidate));
 const PORT = Number(process.env.PORT || 4000);
 const JWT_SECRET = process.env.JWT_SECRET || 'bookworm-dev-secret-change-me';
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173';
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (origin === CLIENT_ORIGIN) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    const isLocalhost = protocol === 'http:' && /^(127\.0\.0\.1|localhost)$/.test(hostname);
+    const isVercelDomain = protocol === 'https:' && hostname.endsWith('.vercel.app');
+    return isLocalhost || isVercelDomain;
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin === CLIENT_ORIGIN || /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Origin not allowed by CORS'));
@@ -126,6 +143,11 @@ function recalculatePenalty(transactionId) {
   return { amount, days };
 }
 
+function loanPeriodDays(memberOrStatus) {
+  const status = typeof memberOrStatus === 'string' ? memberOrStatus : memberOrStatus?.status;
+  return status === 'Faculty' ? 21 : 14;
+}
+
 function refreshMemberBalance(memberId) {
   const row = get("SELECT COALESCE(SUM(fine_amount), 0) AS balance FROM penalties WHERE member_id = ? AND status = 'Unpaid'", [memberId]);
   run('UPDATE members SET late_fee_balance = ? WHERE id = ?', [row.balance || 0, memberId]);
@@ -144,6 +166,62 @@ function refreshBookStatus(bookId) {
 
 function refreshAllBookStatuses() {
   all('SELECT id FROM books').forEach((book) => refreshBookStatus(book.id));
+}
+
+function recoverLoanFromSnapshot(transactionId, snapshot) {
+  if (!snapshot || Number(snapshot.id) !== Number(transactionId)) return null;
+  if (!['Reserved', 'Borrowed', 'Returned', 'Cancelled'].includes(snapshot.status)) return null;
+  if (!get('SELECT id FROM books WHERE id = ?', [snapshot.book_id])) return null;
+  if (!get('SELECT id FROM members WHERE id = ?', [snapshot.member_id])) return null;
+
+  const today = formatWibDate();
+  const receipt = snapshot.receipt_number || `BW-RECOVER-${transactionId}-${Date.now()}`;
+  insert(
+    `INSERT INTO transactions (id, book_id, member_id, type, status, borrow_date, due_date, return_date, receipt_number, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      Number(transactionId),
+      snapshot.book_id,
+      snapshot.member_id,
+      snapshot.type || (snapshot.status === 'Reserved' ? 'Reservation' : 'Borrow'),
+      snapshot.status,
+      snapshot.borrow_date || today,
+      snapshot.due_date || addDaysWib(14),
+      snapshot.return_date || null,
+      receipt,
+      snapshot.created_at || today
+    ]
+  );
+  if (['Reserved', 'Borrowed'].includes(snapshot.status)) {
+    run('UPDATE books SET status = ?, updated_at = ? WHERE id = ?', [snapshot.status, today, snapshot.book_id]);
+  }
+  return get('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+}
+
+function hydrateMemberFromSnapshot(memberId, snapshot) {
+  if (!snapshot || Number(snapshot.id) !== Number(memberId)) return;
+  const balance = Math.max(0, Math.round(Number(snapshot.account_balance || 0)));
+  const fineBalance = Math.max(0, Math.round(Number(snapshot.late_fee_balance || 0)));
+  run(
+    'UPDATE members SET account_balance = MAX(account_balance, ?), late_fee_balance = MAX(late_fee_balance, ?) WHERE id = ?',
+    [balance, fineBalance, memberId]
+  );
+}
+
+function recoverPenaltyFromLoanSnapshot(loanSnapshot) {
+  if (!loanSnapshot || Number(loanSnapshot.fine_amount || 0) <= 0) return null;
+  const loan = get('SELECT * FROM transactions WHERE id = ?', [loanSnapshot.id]) || recoverLoanFromSnapshot(loanSnapshot.id, loanSnapshot);
+  if (!loan) return null;
+  const existing = get('SELECT * FROM penalties WHERE transaction_id = ?', [loan.id]);
+  if (existing) return existing;
+  const fineAmount = Math.max(0, Math.round(Number(loanSnapshot.fine_amount || 0)));
+  const lateDuration = Math.max(0, Math.round(Number(loanSnapshot.late_duration || 0)));
+  insert(
+    'INSERT INTO penalties (transaction_id, member_id, fine_amount, late_duration, status) VALUES (?, ?, ?, ?, ?)',
+    [loan.id, loan.member_id, fineAmount, lateDuration, loanSnapshot.fine_status || 'Unpaid']
+  );
+  refreshMemberBalance(loan.member_id);
+  return get('SELECT * FROM penalties WHERE transaction_id = ?', [loan.id]);
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true, date: formatWibDate() }));
@@ -308,7 +386,7 @@ app.post('/api/reservations', auth('member'), (req, res) => {
 
   const today = formatWibDate();
   const receipt = `BW-${Date.now()}`;
-  const dueDate = addDaysWib(14);
+  const dueDate = addDaysWib(loanPeriodDays(member));
   const reservation = transaction(() => {
     run("UPDATE books SET status = 'Reserved', updated_at = ? WHERE id = ?", [today, book.id]);
     const id = insert(
@@ -320,12 +398,21 @@ app.post('/api/reservations', auth('member'), (req, res) => {
 
   res.status(201).json({
     message: 'Reservation confirmed',
-    details: { ...reservation, book_title: book.title, author: book.author, borrower_email: member.email, borrower_number: member.member_code }
+    details: {
+      receipt_number: reservation.receipt_number,
+      book_title: book.title,
+      author: book.author,
+      status: reservation.status,
+      borrower_email: member.email,
+      borrower_number: member.member_code,
+      borrow_date: reservation.borrow_date,
+      due_date: reservation.due_date
+    }
   });
 });
 
 app.patch('/api/loans/:id/action', auth(), (req, res) => {
-  const loan = get('SELECT * FROM transactions WHERE id = ?', [req.params.id]);
+  const loan = get('SELECT * FROM transactions WHERE id = ?', [req.params.id]) || recoverLoanFromSnapshot(req.params.id, req.body.loan);
   if (!loan) return res.status(404).json({ message: 'Transaction not found' });
   const today = formatWibDate();
 
@@ -340,7 +427,8 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
       run("UPDATE books SET status = 'Available', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'checkout') {
       if (!['Reserved'].includes(loan.status)) throw new Error('Only Reserved loans can be checked out');
-      run("UPDATE transactions SET type = 'Borrow', status = 'Borrowed', borrow_date = ?, due_date = ? WHERE id = ?", [today, addDaysWib(14), loan.id]);
+      const borrower = get('SELECT status FROM members WHERE id = ?', [loan.member_id]);
+      run("UPDATE transactions SET type = 'Borrow', status = 'Borrowed', borrow_date = ?, due_date = ? WHERE id = ?", [today, addDaysWib(loanPeriodDays(borrower)), loan.id]);
       run("UPDATE books SET status = 'Borrowed', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'checkin') {
       if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be checked in');
@@ -349,7 +437,12 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
       run("UPDATE books SET status = 'Available', updated_at = ? WHERE id = ?", [today, loan.book_id]);
     } else if (req.body.action === 'renew') {
       if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be renewed');
-      run("UPDATE transactions SET type = 'Renewal', due_date = ? WHERE id = ?", [addDaysWib(14), loan.id]);
+      const borrower = get('SELECT status FROM members WHERE id = ?', [loan.member_id]);
+      run("UPDATE transactions SET type = 'Renewal', due_date = ? WHERE id = ?", [addDaysWib(loanPeriodDays(borrower)), loan.id]);
+    } else if (req.body.action === 'simulateOverdue') {
+      if (!['Borrowed'].includes(loan.status)) throw new Error('Only Borrowed loans can be marked overdue');
+      run('UPDATE transactions SET due_date = ? WHERE id = ?', [addDaysWib(-7), loan.id]);
+      recalculatePenalty(loan.id);
     } else if (req.body.action === 'cancel') {
       if (!['Reserved'].includes(loan.status)) throw new Error('Only Reserved loans can be cancelled');
       run("UPDATE transactions SET status = 'Cancelled' WHERE id = ?", [loan.id]);
@@ -365,14 +458,29 @@ app.patch('/api/loans/:id/action', auth(), (req, res) => {
 });
 
 app.post('/api/penalties/:id/pay', auth('member'), (req, res) => {
-  const penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [req.params.id]);
+  let penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [req.params.id]);
+  if (!penalty) {
+    const recovered = recoverPenaltyFromLoanSnapshot(req.body.loan);
+    if (recovered) {
+      penalty = get('SELECT p.*, t.receipt_number FROM penalties p JOIN transactions t ON t.id = p.transaction_id WHERE p.id = ?', [recovered.id]);
+    }
+  }
   if (!penalty) return res.status(404).json({ message: 'Fine not found' });
+  if (penalty.status === 'Paid') return badRequest(res, 'This fine is already paid');
   const member = get('SELECT * FROM members WHERE user_id = ?', [req.user.id]);
   if (!member || member.id !== penalty.member_id) return res.status(403).json({ message: 'Cannot pay another member fine' });
+  hydrateMemberFromSnapshot(member.id, req.body.profile);
+  const payableMember = get('SELECT * FROM members WHERE id = ?', [member.id]);
+  if (payableMember.account_balance < penalty.fine_amount) return badRequest(res, 'Insufficient balance. Please top up first');
 
   const paidAt = formatWibDate();
-  run("UPDATE penalties SET status = 'Paid', paid_at = ? WHERE id = ?", [paidAt, penalty.id]);
-  const balance = refreshMemberBalance(member.id);
+  const result = transaction(() => {
+    run("UPDATE members SET account_balance = account_balance - ? WHERE id = ?", [penalty.fine_amount, member.id]);
+    run("UPDATE penalties SET status = 'Paid', paid_at = ? WHERE id = ?", [paidAt, penalty.id]);
+    const unpaidBalance = refreshMemberBalance(member.id);
+    const updatedMember = get('SELECT account_balance FROM members WHERE id = ?', [member.id]);
+    return { unpaidBalance, walletBalance: updatedMember.account_balance };
+  });
   res.json({
     message: 'Fine paid',
     receipt: {
@@ -381,8 +489,24 @@ app.post('/api/penalties/:id/pay', auth('member'), (req, res) => {
       amount: penalty.fine_amount,
       late_duration: penalty.late_duration,
       member: member.full_name,
-      balance
+      unpaid_fine_balance: result.unpaidBalance,
+      wallet_balance: result.walletBalance
     }
+  });
+});
+
+app.post('/api/wallet/topup', auth('member'), (req, res) => {
+  const amount = Number(req.body.amount || 50000);
+  if (!Number.isFinite(amount) || amount <= 0) return badRequest(res, 'Top up amount must be positive');
+  const member = get('SELECT * FROM members WHERE user_id = ?', [req.user.id]);
+  if (!member) return res.status(404).json({ message: 'Member profile not found' });
+  run('UPDATE members SET account_balance = account_balance + ? WHERE id = ?', [Math.round(amount), member.id]);
+  const updated = get('SELECT account_balance, late_fee_balance FROM members WHERE id = ?', [member.id]);
+  res.json({
+    message: 'Top up successful',
+    amount: Math.round(amount),
+    account_balance: updated.account_balance,
+    late_fee_balance: updated.late_fee_balance
   });
 });
 
@@ -426,13 +550,14 @@ app.get('/api/settings', auth('admin'), (req, res) => {
 });
 
 app.put('/api/settings', auth('admin'), (req, res) => {
-  const rate = Number(req.body.dailyFineRate);
+  const rate = Math.round(Number(req.body.dailyFineRate));
   if (!Number.isFinite(rate) || rate < 0) return badRequest(res, 'Daily fine rate must be a positive number');
+  if (rate > 100000) return badRequest(res, 'Daily fine rate must be Rp 100.000 or less');
   run("UPDATE settings SET value = ? WHERE key = 'dailyFineRate'", [String(rate)]);
   res.json({ dailyFineRate: rate });
 });
 
-if (fs.existsSync(clientDist)) {
+if (clientDist) {
   app.use(express.static(clientDist));
   app.get('*', (req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
@@ -445,6 +570,11 @@ app.use((err, req, res, next) => {
 });
 
 await initDatabase();
-app.listen(PORT, () => {
-  console.log(`BookWorm API running on http://127.0.0.1:${PORT}`);
-});
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`BookWorm API running on http://127.0.0.1:${PORT}`);
+  });
+}
+
+export default app;

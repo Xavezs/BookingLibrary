@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookWorm Admin Manual</title>
+  <style>
+    :root {
+      --ink: #06142f;
+      --muted: #50627f;
+      --line: #dbe4f0;
+      --soft: #f3f7fb;
+      --navy: #0f1f3d;
+      --accent: #7c3aed;
+      --green: #dcfce7;
+      --red: #fee2e2;
+      --yellow: #fef3c7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef3f8;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+    .page {
+      max-width: 980px;
+      margin: 28px auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 18px 45px rgba(6, 20, 47, 0.08);
+      overflow: hidden;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 38px 44px;
+    }
+    header p { color: #c7d7f2; margin: 8px 0 0; }
+    h1 { margin: 0; font-size: 34px; line-height: 1.1; }
+    h2 { margin: 32px 0 12px; font-size: 24px; border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    main { padding: 34px 44px 44px; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 22px 0 6px;
+    }
+    .card, .step, .note {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .card { padding: 16px; }
+    .card strong { display: block; margin-bottom: 4px; }
+    .toc {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 22px;
+    }
+    .toc ol { margin: 0; padding-left: 22px; }
+    .step {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 14px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .num {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+    .highlight {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #ede9fe;
+      color: #5b21b6;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .button {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+    .danger { background: #fee2e2; color: #b91c1c; }
+    .secondary { background: #eef2ff; color: #1e3a8a; }
+    .note {
+      background: #fffbeb;
+      border-color: #facc15;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 24px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th { background: var(--soft); text-align: left; }
+    .badge { border-radius: 999px; padding: 3px 9px; font-weight: 700; font-size: 12px; }
+    .available { background: var(--green); color: #047857; }
+    .reserved { background: var(--yellow); color: #b45309; }
+    .borrowed { background: var(--red); color: #b91c1c; }
+    .screen {
+      border: 1px dashed #9fb0c8;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fff, #f8fbff);
+      padding: 16px;
+      margin: 14px 0 20px;
+    }
+    .screen-title { font-weight: 700; margin-bottom: 8px; }
+    .mock-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+    .footer {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 36px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; max-width: none; border: 0; box-shadow: none; border-radius: 0; }
+      header { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      h2 { page-break-after: avoid; }
+      .step, .card, table, .screen { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <h1>BookWorm Admin Manual</h1>
+      <p>Manual penggunaan untuk Librarian/Admin: dashboard, buku, member, loan, fine, dan validasi data.</p>
+      <div class="meta">
+        <div class="card"><strong>Role</strong>Admin / Librarian</div>
+        <div class="card"><strong>Demo Login</strong>admin / 123123</div>
+        <div class="card"><strong>App</strong>BookWorm Library</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="toc">
+        <strong>Daftar Isi</strong>
+        <ol>
+          <li>Login Admin</li>
+          <li>Membaca Dashboard</li>
+          <li>Kelola Buku</li>
+          <li>Kelola Member</li>
+          <li>Kelola Library Loan</li>
+          <li>Fine Rate dan Denda</li>
+          <li>Troubleshooting</li>
+        </ol>
+      </section>
+
+      <h2>1. Login Admin</h2>
+      <div class="step"><div class="num">1</div><div>Buka aplikasi BookWorm melalui domain/local URL yang disediakan.</div></div>
+      <div class="step"><div class="num">2</div><div>Pada halaman login, isi <span class="highlight">Username</span> dengan <strong>admin</strong> dan <span class="highlight">Password</span> dengan <strong>123123</strong>.</div></div>
+      <div class="step"><div class="num">3</div><div>Klik tombol <span class="button">Login</span>. Jika berhasil, aplikasi akan masuk ke <strong>Librarian dashboard</strong>.</div></div>
+      <div class="note"><strong>Catatan validasi:</strong> Jika username/password salah, sistem menampilkan pesan error dan tidak membuat sesi login.</div>
+
+      <h2>2. Membaca Dashboard</h2>
+      <p>Dashboard admin menampilkan ringkasan kondisi perpustakaan.</p>
+      <table>
+        <thead><tr><th>Komponen</th><th>Fungsi</th></tr></thead>
+        <tbody>
+          <tr><td>Borrowed</td><td>Jumlah transaksi dengan status <strong>Borrowed</strong>.</td></tr>
+          <tr><td>Overdue</td><td>Jumlah pinjaman terlambat yang masih memiliki denda unpaid.</td></tr>
+          <tr><td>Visitors</td><td>Angka dummy/demo untuk kebutuhan tampilan dashboard.</td></tr>
+          <tr><td>New Members</td><td>Jumlah member baru pada tanggal berjalan.</td></tr>
+          <tr><td>Quick Review</td><td>Daftar buku terbaru/terupdate beserta status ketersediaannya.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>3. Kelola Buku</h2>
+      <div class="screen">
+        <div class="screen-title">Workspace: Books/Cataloging</div>
+        <div class="mock-row"><span>Search title, author, or ISBN</span><span class="button">Add Book</span></div>
+        <div class="mock-row"><span>Clean Architecture</span><span class="badge available">Available</span></div>
+      </div>
+      <h3>Tambah Buku</h3>
+      <div class="step"><div class="num">1</div><div>Klik menu <span class="highlight">Books/Cataloging</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Klik tombol <span class="button">Add Book</span>.</div></div>
+      <div class="step"><div class="num">3</div><div>Isi Title, Author, Publisher, Barcode, ISBN, Subject/Category, Publication Date, dan Status.</div></div>
+      <div class="step"><div class="num">4</div><div>Klik <span class="button">Save Book</span>.</div></div>
+      <table>
+        <thead><tr><th>Field</th><th>Aturan</th><th>Contoh</th></tr></thead>
+        <tbody>
+          <tr><td>Title</td><td>Wajib diisi.</td><td>Clean Architecture</td></tr>
+          <tr><td>Author</td><td>Wajib diisi.</td><td>Robert C. Martin</td></tr>
+          <tr><td>Barcode</td><td>Numeric string, unik.</td><td>100000000001</td></tr>
+          <tr><td>ISBN</td><td>String ISBN, unik.</td><td>978-0-13-449416-6</td></tr>
+          <tr><td>Status</td><td>Available, Reserved, atau Borrowed.</td><td><span class="badge available">Available</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Edit dan Delete Buku</h3>
+      <p>Pada card buku, gunakan tombol <span class="button secondary">Edit</span> untuk mengubah data dan tombol <span class="button danger">Delete</span> untuk menghapus. Pastikan buku yang dihapus tidak sedang dipakai untuk demo transaksi.</p>
+
+      <h2>4. Kelola Member</h2>
+      <div class="step"><div class="num">1</div><div>Buka menu <span class="highlight">Members</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Klik <span class="button">Add Member</span> untuk membuat akun member baru.</div></div>
+      <div class="step"><div class="num">3</div><div>Isi Full Name, Username, Password, Email, Member ID, dan Status.</div></div>
+      <div class="step"><div class="num">4</div><div>Klik <span class="button">Save Member</span>. Akun login member otomatis dibuat.</div></div>
+      <table>
+        <thead><tr><th>Field</th><th>Aturan</th></tr></thead>
+        <tbody>
+          <tr><td>Username</td><td>Harus unik. Digunakan untuk login member.</td></tr>
+          <tr><td>Password</td><td>Minimal 6 karakter.</td></tr>
+          <tr><td>Email</td><td>Format email valid dan unik.</td></tr>
+          <tr><td>Member ID</td><td>10 karakter, diawali angka 2.</td></tr>
+          <tr><td>Status</td><td>Student atau Faculty. Student 14 hari masa pinjam, Faculty 21 hari.</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Delete member:</strong> Saat member dihapus, user login terkait juga ikut dihapus sehingga akun lama tidak bisa login lagi.</div>
+
+      <h2>5. Kelola Library Loan</h2>
+      <p>Menu <span class="highlight">Library Loan</span> adalah pusat transaksi reservation, checkout, return, renew, dan fine testing.</p>
+      <table>
+        <thead><tr><th>Status</th><th>Arti</th><th>Action Admin</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge reserved">Reserved</span></td><td>Member sudah booking buku, tetapi buku belum resmi dipinjam.</td><td>Check-Out atau Cancel.</td></tr>
+          <tr><td><span class="badge borrowed">Borrowed</span></td><td>Buku sudah dipinjam dan sedang berada di member.</td><td>Check-In, Renew, atau Test Fine.</td></tr>
+          <tr><td>Returned</td><td>Buku sudah dikembalikan.</td><td>Tidak ada action lanjutan kecuali fine payment oleh member.</td></tr>
+        </tbody>
+      </table>
+      <h3>Check-Out</h3>
+      <div class="step"><div class="num">1</div><div>Buka <span class="highlight">Library Loan</span>.</div></div>
+      <div class="step"><div class="num">2</div><div>Cari transaksi dengan status <span class="badge reserved">Reserved</span>.</div></div>
+      <div class="step"><div class="num">3</div><div>Klik <span class="button secondary">Check-Out</span>. Status berubah menjadi <span class="badge borrowed">Borrowed</span>.</div></div>
+      <h3>Check-In</h3>
+      <p>Klik <span class="button secondary">Check-In</span> untuk mengembalikan buku. Book status akan kembali <span class="badge available">Available</span>.</p>
+      <h3>Renew</h3>
+      <p>Klik <span class="button secondary">Renew</span> untuk memperpanjang due date sesuai status member.</p>
+      <h3>Cancel</h3>
+      <p>Klik <span class="button danger">Cancel</span> hanya untuk transaksi <span class="badge reserved">Reserved</span>. Book status kembali Available.</p>
+
+      <h2>6. Fine Rate dan Denda</h2>
+      <p>Daily fine rate berada di panel <span class="highlight">Quick Review</span> pada Dashboard Admin.</p>
+      <div class="step"><div class="num">1</div><div>Masukkan nominal denda per hari, misalnya <strong>2500</strong>.</div></div>
+      <div class="step"><div class="num">2</div><div>Klik tombol centang <span class="button">Save</span>.</div></div>
+      <div class="step"><div class="num">3</div><div>Untuk demo denda cepat, buka Library Loan pada loan Borrowed lalu klik <span class="button danger">Test Fine</span>.</div></div>
+      <div class="note"><strong>Batas sistem:</strong> Fine rate maksimal Rp 100.000 per hari supaya nominal denda tidak merusak demo.</div>
+
+      <h2>7. Troubleshooting Admin</h2>
+      <table>
+        <thead><tr><th>Masalah</th><th>Penyebab Umum</th><th>Solusi</th></tr></thead>
+        <tbody>
+          <tr><td>Transaction not found</td><td>State serverless Vercel tidak sinkron.</td><td>Refresh halaman dan gunakan deployment terbaru. Untuk demo stabil, jalankan lokal.</td></tr>
+          <tr><td>Check-Out tidak berubah</td><td>Browser masih cache bundle lama.</td><td>Hard refresh: Ctrl + Shift + R.</td></tr>
+          <tr><td>Book tetap Available setelah reserve</td><td>Data belum reload atau request kena instance berbeda.</td><td>Buka ulang Books/Cataloging atau gunakan demo lokal.</td></tr>
+          <tr><td>Admin tidak bisa login</td><td>Password salah atau data belum reset.</td><td>Gunakan admin / 123123. Jika lokal, hapus server/data/bookworm.sqlite lalu restart.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="footer">
+        BookWorm Admin Manual. Untuk demo paling stabil, jalankan aplikasi secara lokal dengan <strong>npm run dev</strong>.
+      </div>
+    </main>
+  </article>
+</body>
+</html>
